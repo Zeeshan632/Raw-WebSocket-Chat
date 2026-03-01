@@ -10,7 +10,7 @@ import * as bcrypt from "bcrypt";
 import { generateTokens } from "../utils/functions";
 
 const userRouter = Router();
-const userRepo = AppDataSource.getRepository(User);
+export const userRepo = AppDataSource.getRepository(User);
 
 //Create User
 userRouter.post("/signup", validate(createUserValidator), async (req, res) => {
@@ -29,7 +29,10 @@ userRouter.post("/signup", validate(createUserValidator), async (req, res) => {
 
     res
       .status(201)
-      .json({ message: "User created successfully", user: {id: newUser.id, name: newUser.name, email: newUser.email} });
+      .json({
+        message: "User created successfully",
+        user: { id: newUser.id, name: newUser.name, email: newUser.email },
+      });
   } catch (error) {
     console.error("Error creating user:", error);
     res.status(500).json({ message: "Internal server error" });
@@ -61,14 +64,11 @@ userRouter.post("/login", validate(loginUserValidator), async (req, res) => {
       findUser.email,
     );
 
-    return res
-      .status(200)
-      .json({
-        data: { id: findUser.id, name: findUser.name, email: findUser.email },
-        accessToken,
-        refreshToken,
-      });
-
+    return res.status(200).json({
+      data: { id: findUser.id, name: findUser.name, email: findUser.email },
+      accessToken,
+      refreshToken,
+    });
   } catch (err) {
     console.error("Error loggin in user: ", err);
     res.status(500).json({ message: "Internal server error while loggin in!" });
