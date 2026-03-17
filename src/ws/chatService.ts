@@ -26,14 +26,21 @@ export class ChatService {
     firstUserId: number,
     secondUserId: number,
   ): Promise<Conversation | null> {
+    // Subquery to count total participants per conversation
+    const subQuery = this.conversationRepo
+      .createQueryBuilder("conversation")
+      .leftJoin("conversation.participants", "p")
+      .select("conversation.id", "id")
+      .addSelect("COUNT(p.id)", "participantCount")
+      .groupBy("conversation.id")
+      .having("COUNT(p.id) = 2");
+    
     return await this.conversationRepo
       .createQueryBuilder("conversation")
       .leftJoinAndSelect("conversation.participants", "participant")
-      .where("participant.id IN (:...ids)", {
-        ids: [firstUserId, secondUserId],
-      })
-      .groupBy("conversation.id")
-      .having("COUNT(participant.id) = 2")
+      .where(`conversation.id IN (${subQuery.getQuery()})`)
+      .andWhere("participant.id IN (:...ids)", { ids: [firstUserId, secondUserId] })
+      .setParameters(subQuery.getParameters())
       .getOne();
   }
 
@@ -53,7 +60,8 @@ export class ChatService {
       participants,
     });
 
-    return await this.conversationRepo.save(conversation);
+    const saved = await this.conversationRepo.save(conversation);
+    return await this.getConversationWithParticipants(saved.id) as Conversation;
   }
 
   async getConversationWithParticipants(

@@ -29,6 +29,11 @@ export const attachWebSockerServer = (server: any) => {
   });
 
   wss.on("connection", async (socket: SocketConnection, req: { userId: number }) => {
+    if (!req.userId || typeof req.userId !== "number" || !Number.isFinite(req.userId)) {
+      socket.send(JSON.stringify({ error: "Invalid or missing userId" }));
+      socket.terminate();
+      return;
+    }
     socket.isAlive = true;
     socket.on("pong", () => (socket.isAlive = true));
 
@@ -39,7 +44,14 @@ export const attachWebSockerServer = (server: any) => {
 
     socket.on("message", async (data: WsData) => {
       const raw = typeof data === "string" ? data : data.toString();
-      const payload = JSON.parse(raw) as IncomingSocketMessage;
+      // incoming message validation
+      let payload: IncomingSocketMessage;
+      try {
+        payload = JSON.parse(raw) as IncomingSocketMessage;
+      } catch {
+        socket.send(JSON.stringify({ error: "Invalid JSON payload" }));
+        return;
+      }
 
       const senderId = req.userId;
 
@@ -62,6 +74,10 @@ export const attachWebSockerServer = (server: any) => {
             conversation = await chatService.createConversation(
               senderId,
               payload.receiverId,
+            );
+            // Reload to get participants relation for broadcasting
+            conversation = await chatService.getConversationWithParticipants(
+              conversation.id,
             );
           }
         }
