@@ -16,6 +16,15 @@ export class Message {
     @ManyToOne(() => Conversation, conversation => conversation.messages)
     conversation: Conversation
 
+    @Column({ default: false })
+    isRead: boolean
+
+    @Column({ type: 'timestamptz', nullable: true })
+    readAt?: Date
+
+    @Column({ type: 'timestamptz', nullable: true })
+    deliveredAt?: Date
+
     @CreateDateColumn()
     createdAt: Date
 
