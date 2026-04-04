@@ -23,25 +23,25 @@ export class ChatService {
   }
 
   async findPrivateConversation(
-    firstUserId: number,
-    secondUserId: number,
+    user1Id: number,
+    user2Id: number,
   ): Promise<Conversation | null> {
-    // Subquery to count total participants per conversation
-    const subQuery = this.conversationRepo
-      .createQueryBuilder("conversation")
-      .leftJoin("conversation.participants", "p")
-      .select("conversation.id", "id")
-      .addSelect("COUNT(p.id)", "participantCount")
-      .groupBy("conversation.id")
-      .having("COUNT(p.id) = 2");
-    
-    return await this.conversationRepo
+    const conversations = await this.conversationRepo
       .createQueryBuilder("conversation")
       .leftJoinAndSelect("conversation.participants", "participant")
-      .where(`conversation.id IN (${subQuery.getQuery()})`)
-      .andWhere("participant.id IN (:...ids)", { ids: [firstUserId, secondUserId] })
-      .setParameters(subQuery.getParameters())
-      .getOne();
+      .where("participant.id IN (:...ids)", {
+        ids: [user1Id, user2Id],
+      })
+      .getMany();
+
+    const conversation = conversations.find(
+      (conv) =>
+        conv.participants.length === 2 &&
+        conv.participants.some((p) => p.id === user1Id) &&
+        conv.participants.some((p) => p.id === user2Id),
+    );
+
+    return conversation || null;
   }
 
   async createConversation(
@@ -61,7 +61,9 @@ export class ChatService {
     });
 
     const saved = await this.conversationRepo.save(conversation);
-    return await this.getConversationWithParticipants(saved.id) as Conversation;
+    return (await this.getConversationWithParticipants(
+      saved.id,
+    )) as Conversation;
   }
 
   async getConversationWithParticipants(
@@ -84,40 +86,35 @@ export class ChatService {
       content,
       deliveredAt: new Date(),
     });
-
-    return await this.messageRepo.save(message);
-  }
-
-  async getMessageById(messageId: number): Promise<Message | null> {
+    const savedMessage = await this.messageRepo.save(message);
     return await this.messageRepo.findOne({
-      where: { id: messageId },
-      relations: ["conversation"],
+      where: { id: savedMessage.id },
+      relations: ['sender'],
     });
   }
 
-  async markMessageRead(message: Message): Promise<Message> {
-    message.isRead = true;
-    message.readAt = new Date();
-    return await this.messageRepo.save(message);
+  async markMessageRead(conversationId: number, lastMessageId: number) {
+    try {
+      await this.conversationRepo.update({id: conversationId}, {lastMessage: {id: lastMessageId}, lastReadAt: new Date()})
+      const conversation = await this.getConversationWithParticipants(conversationId)
+      return conversation;
+    }catch(err){
+      console.log("Some error with markMessageRead:    ", err)
+      return null;
+    }
   }
 
-  broadcastMessage(conversation: Conversation, message: Message) {
-    const payload = JSON.stringify({
+  broadcastMessage(conversation: Conversation, message: Message | null) {
+    const payload = {
       type: "message",
       conversationId: conversation.id,
-      senderId: message.sender?.id,
-      messageId: message.id,
-      messageText: message.content,
-      createdAt: message.createdAt,
-      deliveredAt: message.deliveredAt,
-      isRead: message.isRead,
-      readAt: message.readAt,
-    });
+      message
+    };
 
     conversation.participants?.forEach((participant) => {
       const socket = this.onlineUsers.get(participant.id);
       if (socket) {
-        socket.send(payload);
+        socket.send(JSON.stringify(payload));
       }
     });
   }
@@ -145,15 +142,13 @@ export class ChatService {
 
   broadcastReadReceipt(
     conversation: Conversation,
-    readerId: number,
-    messageId: number,
+    isRead: boolean,
     readAt: Date,
   ) {
     const payload = JSON.stringify({
       type: "read",
       conversationId: conversation.id,
-      readerId,
-      messageId,
+      isRead,
       readAt,
     });
 
