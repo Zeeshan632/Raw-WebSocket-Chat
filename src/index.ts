@@ -7,6 +7,8 @@ import { AppDataSource } from "./data-source"
 import userRouter from "./router/userRouter"
 import cookieParser from "cookie-parser"
 import { attachWebSockerServer } from "./ws/server";
+import conversationRouter from "./router/conversationRouter";
+import messageRouter from "./router/messageRouter";
 
 const app = express()
 const server = http.createServer(app)
@@ -17,6 +19,8 @@ app.use(cookieParser())
 
 // routes
 app.use("/", userRouter)
+app.use("/conversation", conversationRouter)
+app.use("/message", messageRouter)
 
 attachWebSockerServer(server)
 

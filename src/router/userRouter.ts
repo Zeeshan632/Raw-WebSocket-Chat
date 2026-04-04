@@ -8,6 +8,8 @@ import {
 } from "../validations/user.validation";
 import * as bcrypt from "bcrypt";
 import { generateTokens } from "../utils/functions";
+import { verifyJwt } from "../middlewares/auth.middleware";
+import { CustomRequest } from "../utils/types";
 
 const userRouter = Router();
 export const userRepo = AppDataSource.getRepository(User);
@@ -44,7 +46,7 @@ userRouter.post("/login", validate(loginUserValidator), async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const findUser = await userRepo.findOneBy({ email });
+    const findUser = await userRepo.createQueryBuilder('user').addSelect('user.password').where("user.email = :email", {email}).getOne()
 
     if (!findUser) {
       return res
@@ -74,5 +76,11 @@ userRouter.post("/login", validate(loginUserValidator), async (req, res) => {
     res.status(500).json({ message: "Internal server error while loggin in!" });
   }
 });
+
+userRouter.route("/all-users").get(verifyJwt, async(req: CustomRequest, res) => {
+  const users = await userRepo.find()
+
+  res.status(200).json({users})
+})
 
 export default userRouter;

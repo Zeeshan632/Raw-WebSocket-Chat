@@ -13,11 +13,10 @@ export class User {
     @Column()
     email: string;
 
-    @Column()
+    @Column({select: false})
     password: string;
 
     @ManyToMany(() => Conversation, conversation => conversation.participants)
-    @JoinTable()
     conversations: Conversation[]
 
     @OneToMany(() => Message, message => message.sender)
