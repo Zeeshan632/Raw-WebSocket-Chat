@@ -1,4 +1,4 @@
-import { Column, Entity, JoinTable, ManyToMany, OneToMany, PrimaryGeneratedColumn } from "typeorm";
+import { Column, Entity, JoinColumn, JoinTable, ManyToMany, OneToMany, OneToOne, PrimaryGeneratedColumn } from "typeorm";
 import { Conversation } from "./Conversation";
 import { Message } from "./Message";
 
@@ -21,4 +21,8 @@ export class User {
 
     @OneToMany(() => Message, message => message.sender)
     messages: Message[]
+
+    @OneToOne(() => Message, {nullable: true})
+    @JoinColumn()
+    lastReadMessage?: Message;
 }

@@ -28,9 +28,6 @@ export class Conversation {
   @OneToOne(() => Message, {nullable: true})
   lastMessage?: Message;
 
-  @Column({ type: 'timestamptz', nullable: true })
-  lastReadAt?: Date;
-  
   @CreateDateColumn()
   createdAt: Date;
 
