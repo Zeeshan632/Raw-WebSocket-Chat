@@ -117,7 +117,6 @@ export const attachWebSockerServer = (server: any) => {
                 senderId,
                 payload.messageText,
               );
-
               chatService.broadcastMessage(conversation, message);
               break;
             }
@@ -139,17 +138,18 @@ export const attachWebSockerServer = (server: any) => {
             }
 
             case "read": {
-              console.log('triggered........')
-              if (!payload.conversationId || !payload.lastMessageId) return;
+              if (!payload.conversationId) return;
+              const receiverId = senderId;
+              const lastMessageReadId = await chatService.getLastMessageReadId(receiverId)
 
-              const conversation = await chatService.markMessageRead(
-                payload.conversationId,
-                payload.lastMessageId,
-              );
+              const messagesRead = await chatService.markMessagesAsReadAfterLastMessageReadId(+payload.conversationId, lastMessageReadId, receiverId)
 
-              if (!conversation) return;
+              if(!messagesRead?.success) {
+                console.log("ERROR with markMessagesAsReadAfterLastMessageReadId")
+                return null;
+              }
 
-              chatService.broadcastReadReceipt(conversation, true, new Date());
+              chatService.broadcastReadReceipt(+payload.conversationId, receiverId, messagesRead.lastReadMessageId);
               break;
             }
 

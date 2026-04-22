@@ -4,9 +4,11 @@ import { AppDataSource } from "../data-source";
 import { Conversation } from "../entity/Conversation";
 import { Message } from "../entity/Message";
 import { userRepo } from "../router/userRouter";
+import { User } from "../entity/User";
 
 export class ChatService {
   private messageRepo = AppDataSource.getRepository(Message);
+  private userRepo = AppDataSource.getRepository(User);
   private conversationRepo = AppDataSource.getRepository(Conversation);
   private onlineUsers = new Map<number, WebSocket>();
 
@@ -69,10 +71,11 @@ export class ChatService {
   async getConversationWithParticipants(
     conversationId: number,
   ): Promise<Conversation | null> {
-    return await this.conversationRepo.findOne({
+    const conversation = await this.conversationRepo.findOne({
       where: { id: conversationId },
       relations: ["participants"],
     });
+    return conversation;
   }
 
   async saveMessage(
@@ -89,28 +92,74 @@ export class ChatService {
     const savedMessage = await this.messageRepo.save(message);
     return await this.messageRepo.findOne({
       where: { id: savedMessage.id },
-      relations: ['sender'],
+      relations: ["sender"],
     });
   }
 
-  async markMessageRead(conversationId: number, lastMessageId: number) {
+  async markMessagesAsReadAfterLastMessageReadId(
+    conversationId: number,
+    lastMessageReadId: number | undefined,
+    receiverId: number,
+  ) {
     try {
-      await this.conversationRepo.update({id: conversationId}, {lastMessage: {id: lastMessageId}, lastReadAt: new Date()})
-      const conversation = await this.getConversationWithParticipants(conversationId)
-      return conversation;
-    }catch(err){
-      console.log("Some error with markMessageRead:    ", err)
+      if (lastMessageReadId) {
+        await this.messageRepo
+          .createQueryBuilder()
+          .update()
+          .set({ isRead: true })
+          .where("conversation.id = :conversationId", { conversationId })
+          .andWhere("id > :lastMessageReadId", { lastMessageReadId })
+          .andWhere("isRead=false")
+          .execute();
+      } else {
+        await this.messageRepo
+          .createQueryBuilder()
+          .update()
+          .set({ isRead: true })
+          .where("conversation.id = :conversationId", { conversationId })
+          .andWhere("isRead=false")
+          .execute();
+      }
+
+      const lastReadMessage = await this.messageRepo.findOne({
+        where: { conversation: { id: conversationId }, isRead: true },
+        order: { createdAt: "DESC" },
+      });
+
+      if (lastReadMessage) {
+        await this.userRepo.createQueryBuilder()
+          .relation(User, "lastReadMessage")
+          .of(receiverId)
+          .set(lastReadMessage.id)
+      }
+
+      // console.log("")
+      
+      return {success: true, lastReadMessageId: lastReadMessage?.id};
+    } catch (err) {
+      console.log(
+        "Some error with markMessagesAsReadAfterLastMessageReadId:    ",
+        err,
+      );
       return null;
     }
   }
 
-  broadcastMessage(conversation: Conversation, message: Message | null) {
+  async getLastMessageReadId(userId: number) {
+    try {
+      const user = await userRepo.findOne({ where: { id: userId }, relations: ["lastReadMessage"] });
+      return user?.lastReadMessage?.id;
+    } catch (err) {
+      console.log("ERR with fetcing last message read --> ", err);
+    }
+  }
+
+  async broadcastMessage(conversation: Conversation, message: Message | null) {
     const payload = {
       type: "message",
       conversationId: conversation.id,
-      message
+      message,
     };
-
     conversation.participants?.forEach((participant) => {
       const socket = this.onlineUsers.get(participant.id);
       if (socket) {
@@ -140,22 +189,22 @@ export class ChatService {
     });
   }
 
-  broadcastReadReceipt(
-    conversation: Conversation,
-    isRead: boolean,
-    readAt: Date,
-  ) {
+  async broadcastReadReceipt(conversationId: number, receiverId: number, lastReadMessageId?: number) {
+    const conversation =
+      await this.getConversationWithParticipants(conversationId);
     const payload = JSON.stringify({
       type: "read",
-      conversationId: conversation.id,
-      isRead,
-      readAt,
+      conversationId: conversation?.id,
+      lastReadMessageId
     });
 
+    if (!conversation) return null;
     conversation.participants?.forEach((participant) => {
-      const socket = this.onlineUsers.get(participant.id);
-      if (socket) {
-        socket.send(payload);
+      if (participant.id !== receiverId) {
+        const socket = this.onlineUsers.get(participant.id);
+        if (socket) {
+          socket.send(payload);
+        }
       }
     });
   }

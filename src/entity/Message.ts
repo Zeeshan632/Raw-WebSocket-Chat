@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 import { User } from "./User";
 import { Conversation } from "./Conversation";
 
@@ -13,7 +13,11 @@ export class Message {
     @ManyToOne(() => User, user => user.messages)
     sender: User
 
+    @Column()
+    conversationId: number
+    
     @ManyToOne(() => Conversation, conversation => conversation.messages)
+    @JoinColumn({name: 'conversationId'})
     conversation: Conversation
 
     @Column({ type: 'timestamptz', nullable: true })
@@ -24,4 +28,7 @@ export class Message {
 
     @UpdateDateColumn()
     updatedAt: Date
+
+    @Column('boolean', { default: false })
+    isRead: boolean
 }
